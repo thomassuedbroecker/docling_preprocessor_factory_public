@@ -205,3 +205,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Additional files to ignore
+documentation/.$static-component-diagram.drawio.bkp
+.DS_Store
+documentation/.$dynamic-flow-diagram.drawio.bkp
