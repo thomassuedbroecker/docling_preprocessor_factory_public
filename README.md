@@ -87,6 +87,71 @@ Important environment variables loaded by the default workflow:
 | `DOC_PREPROCESS_SUPPORTED_EXTENSIONS` | `.pdf,.docx,.xlsx,.xls,.pptx,.ppt` | Recursive file extension allowlist. |
 | `DOC_PREPROCESS_REQUIRED_FIELDS` | `source_file_path,input_format,unit_number,unit_type,text_markdown,ocr_image_text,metadata` | Required JSONL keys enforced by the verifier. |
 
+## Test Commands
+
+This repository currently uses executable end-to-end checks instead of a separate `pytest` or `unittest` suite.
+
+Default end-to-end command:
+
+```bash
+bash code/scripts/run_local.sh
+```
+
+Direct entrypoint checks used for verification:
+
+```bash
+code/.venv/bin/python code/preprocess_app.py \
+  --input-dir code/examples \
+  --output-dir code/output \
+  --output-jsonl code/output/preprocessed.jsonl \
+  --tesseract-bin tesseract \
+  --supported-extensions .pdf,.docx,.xlsx,.xls,.pptx,.ppt \
+  --required-python 3.12 \
+  --sample-image-name sample_ocr_image.png \
+  --sample-pdf-name sample.pdf \
+  --sample-docx-name sample.docx \
+  --sample-xlsx-name sample.xlsx \
+  --sample-xls-name sample.xls \
+  --sample-pptx-name sample.pptx \
+  --sample-ppt-name sample.ppt
+
+code/.venv/bin/python code/verify_output.py \
+  --examples-dir code/examples \
+  --output-jsonl code/output/preprocessed.jsonl \
+  --supported-extensions .pdf,.docx,.xlsx,.xls,.pptx,.ppt \
+  --required-fields source_file_path,input_format,unit_number,unit_type,text_markdown,ocr_image_text,metadata \
+  --required-python 3.12
+```
+
+## Tested
+
+Current verified state as of `2026-04-08`:
+
+| State | Meaning |
+| --- | --- |
+| 🟢 | Executed and passed |
+| 🟡 | Executed and passed with a known non-blocking warning or environment limitation |
+| 🔴 | Failed or currently blocking |
+
+| State | Check | Result | Details |
+| --- | --- | --- | --- |
+| 🟢 | `bash code/scripts/run_local.sh` | Passed on `2026-04-08` | Created `code/.venv`, installed dependencies, regenerated the sample corpus, wrote `code/output/preprocessed.jsonl`, and finished with verification success. |
+| 🟢 | `code/.venv/bin/python code/preprocess_app.py ...` | Passed on `2026-04-08` | Rewrote `code/output/preprocessed.jsonl` and generated `9` JSONL records from `5` supported example documents in the current environment. |
+| 🟢 | `code/.venv/bin/python code/verify_output.py ...` | Passed on `2026-04-08` | Validated JSONL parseability, required fields, and source coverage for the generated sample set. |
+| 🟢 | Runtime toolchain versions | Verified on `2026-04-08` | `Python 3.12.12` in `code/.venv` and `tesseract 5.5.1` at `/opt/homebrew/bin/tesseract`. |
+| 🟡 | LibreOffice availability | Checked on `2026-04-08` | `soffice` was not installed, so legacy `.ppt` sample generation and `.ppt` processing were skipped by design. |
+| 🟡 | Known runtime warning | Present on `2026-04-08` | `torch.utils.data.dataloader` emitted a non-blocking `pin_memory` warning during preprocessing; the run still passed. |
+| 🟢 | Current failing checks | None on `2026-04-08` | No blocking failures remained after the successful end-to-end run. |
+
+What is covered by the available checks:
+
+- creation and reuse of `code/.venv` plus dependency installation through the default bootstrap script
+- sample document generation under `code/examples/` for PDF, DOCX, PPTX, XLSX, and XLS
+- preprocessing and JSONL write paths for page-wise, slide-wise, sheet-wise, and document-level extraction
+- verifier checks for JSONL existence, non-empty output, required fields, and source-file coverage
+- OCR execution in the current environment with local `tesseract 5.5.1`
+- graceful skip behavior for legacy `.ppt` support when LibreOffice is unavailable
+
 ## Open-Source Dependencies
 
 This repository is Apache-2.0 licensed and uses open-source dependencies only.
