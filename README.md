@@ -186,6 +186,8 @@ code/.venv/bin/python code/verify_project_consistency.py \
 
 Current verified state as of `2026-04-08`:
 
+The commands below were rerun after aligning dependency profiles, bootstrap behavior, and the documentation consistency checks.
+
 | State | Meaning |
 | --- | --- |
 | 🟢 | Executed and passed |
@@ -194,10 +196,10 @@ Current verified state as of `2026-04-08`:
 
 | State | Check | Result | Details |
 | --- | --- | --- | --- |
-| 🟢 | `bash code/scripts/run_local.sh` | Passed on `2026-04-08` | Created `code/.venv`, installed dependencies, regenerated the sample corpus, wrote `code/output/preprocessed.jsonl`, and finished with both verification steps succeeding. |
+| 🟢 | `bash code/scripts/run_local.sh` | Passed on `2026-04-08` | Reran after the dependency/doc sync changes, created or reused `code/.venv`, regenerated the sample corpus, wrote `code/output/preprocessed.jsonl`, and finished with both verification steps succeeding. |
 | 🟢 | `code/.venv/bin/python code/preprocess_app.py ...` | Passed on `2026-04-08` | Rewrote `code/output/preprocessed.jsonl` and generated `9` JSONL records from `5` supported example documents in the current environment. |
 | 🟢 | `code/.venv/bin/python code/verify_output.py ...` | Passed on `2026-04-08` | Validated JSONL parseability, required fields, and source coverage for the generated sample set. |
-| 🟢 | `code/.venv/bin/python code/verify_project_consistency.py ...` | Passed on `2026-04-08` | Validated dependency profiles against `requirements.txt`, `requirements-docling-only.txt`, `code/scripts/requirements.txt`, and the documentation blocks in the repository. |
+| 🟢 | `code/.venv/bin/python code/verify_project_consistency.py ...` | Passed on `2026-04-08` | Reran after the sync changes and validated dependency profiles against `requirements.txt`, `requirements-docling-only.txt`, `code/scripts/requirements.txt`, and the documentation blocks in the repository. |
 | 🟢 | Runtime toolchain versions | Verified on `2026-04-08` | `Python 3.12.12` in `code/.venv` and `tesseract 5.5.1` at `/opt/homebrew/bin/tesseract`. |
 | 🟡 | LibreOffice availability | Checked on `2026-04-08` | `soffice` was not installed, so legacy `.ppt` sample generation and `.ppt` processing were skipped by design. |
 | 🟡 | Known runtime warning | Present on `2026-04-08` | `torch.utils.data.dataloader` emitted a non-blocking `pin_memory` warning during preprocessing; the run still passed. |
