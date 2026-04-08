@@ -8,6 +8,18 @@ _Note: This quickstart was developed with the help of AI._
 - Optional: LibreOffice (`soffice`) for `.ppt` generation and `.ppt` processing
 - Optional: Tesseract for OCR text extraction from embedded images
 
+## Dependency Profiles
+The repository exposes a default workflow profile and a smaller Docling-only profile.
+
+<!-- BEGIN:DEPENDENCY_SCOPE_EXPLANATION -->
+- These libs are not required by Docling itself.
+- They are required by this repository's default implementation choices.
+- If you reduce the project to Docling-only conversion, most of them can be removed.
+<!-- END:DEPENDENCY_SCOPE_EXPLANATION -->
+
+Use `requirements.txt` with `code/scripts/run_local.sh` for the full repository workflow.
+Use `requirements-docling-only.txt` for the standalone modules in `code/Docling_multi_format_preprocessing_pipeline.py` and `code/docling_config_examples.py`.
+
 ## Illustrative Snippet (Not Executable As-Is)
 ```bash
 # Demonstration only: this inline snippet is illustrative and will not run as-is.
@@ -34,11 +46,12 @@ What the helper script does:
 
 - validates that the selected Python resolves to version `3.12`
 - creates or reuses `code/.venv`
-- rewrites `code/scripts/requirements.txt` with the pinned dependency set
+- rewrites `code/scripts/requirements.txt` from the canonical dependency profile
 - installs dependencies
 - regenerates sample input files in `code/examples/`
 - writes `code/output/preprocessed.jsonl`
 - runs `code/verify_output.py` to validate structure and source coverage
+- runs `code/verify_project_consistency.py` to validate that dependency documentation and requirements stay in sync
 
 ## Input, Output, and Verification
 - The application loads input documents from `code/examples/`.
@@ -46,6 +59,7 @@ What the helper script does:
 - `run_local.sh` verifies that:
   - the JSONL file exists and is not empty,
   - each JSONL record contains required fields,
-  - every supported file in `code/examples/` is represented in the output.
+  - every supported file in `code/examples/` is represented in the output,
+  - dependency requirements files and documentation blocks stay aligned.
 - If verification fails, the script exits non-zero.
 - If verification succeeds, it prints a clear `SUCCESS` message.

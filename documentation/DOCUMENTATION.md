@@ -22,7 +22,7 @@ The system provides a local document preprocessing pipeline that:
 Modular batch-processing pipeline with script orchestration:
 - **Orchestrator layer**: `code/scripts/run_local.sh`
 - **Application layer**: `code/preprocess_app.py`
-- **Verification layer**: `code/verify_output.py`
+- **Verification layers**: `code/verify_output.py`, `code/verify_project_consistency.py`
 - **Optional alternate pipeline module**: `code/Docling_multi_format_preprocessing_pipeline.py` (not invoked by default orchestration)
 
 ---
@@ -39,18 +39,22 @@ docling_preprocessor_factory/
     scripts/
       run_local.sh
       requirements.txt
+    dependency_profiles.py
     preprocess_app.py
     verify_output.py
+    verify_project_consistency.py
     Docling_multi_format_preprocessing_pipeline.py
+    docling_config_examples.py
     examples/
     output/
+  requirements-docling-only.txt
 ```
 
 ### Class and Component Responsibilities
 
 | Module | Class/Component | Responsibility |
 |---|---|---|
-| `code/scripts/run_local.sh` | Shell orchestration | Loads `.env`, sets defaults, enforces Python version, prepares venv/dependencies, runs preprocessing app, runs verifier, enforces non-zero exit on failure. |
+| `code/scripts/run_local.sh` | Shell orchestration | Loads `.env`, sets defaults, enforces Python version, prepares venv/dependencies, runs preprocessing app, runs both verifiers, and enforces non-zero exit on failure. |
 | `code/preprocess_app.py` | `AppConfig`, `AppConfigLoader` | Resolves runtime config from CLI/environment. |
 | `code/preprocess_app.py` | `PythonVersionEnforcer` | Enforces exact major/minor Python version. |
 | `code/preprocess_app.py` | `LibreOfficeService` | Headless format conversion for legacy office formats (mainly PPT/PPTX path). |
@@ -63,7 +67,10 @@ docling_preprocessor_factory/
 | `code/verify_output.py` | `VerificationConfig`, `VerificationConfigLoader` | Resolves verifier config from CLI/environment. |
 | `code/verify_output.py` | `OutputVerifier` | Validates output existence, JSONL parseability, required fields, and one-to-one source coverage. |
 | `code/verify_output.py` | `VerificationApplication`, `ApplicationEntryPoint` | Verifier lifecycle and exit behavior. |
+| `code/dependency_profiles.py` | `DependencySpec` and render helpers | Canonical dependency profile definitions shared by bootstrap and consistency verification. |
+| `code/verify_project_consistency.py` | `ProjectConsistencyVerifier` | Validates dependency profile files and documentation blocks remain synchronized. |
 | `code/Docling_multi_format_preprocessing_pipeline.py` | `PreprocessingPipeline` and related classes | Standalone Docling-centric extraction pipeline with environment-driven CLI wrapper. |
+| `code/docling_config_examples.py` | Converter builder helpers | Isolates the Docling-only converter configuration variants used in the documentation. |
 
 ### Key Abstractions
 - **Immutable config dataclasses**: `AppConfig`, `VerificationConfig`.
@@ -72,8 +79,42 @@ docling_preprocessor_factory/
 - **Dispatcher abstraction**: extension-based routing in `DocumentPreprocessor._process_file`.
 
 ### External Dependencies
-- Python libraries: `docling`, `PyMuPDF` (`fitz`), `python-docx`, `openpyxl`, `xlrd`, `xlwt`, `python-pptx`, `reportlab`, `Pillow`, `pytesseract`.
+- Default workflow Python libraries: `docling`, `PyMuPDF` (`fitz`), `python-docx`, `openpyxl`, `xlrd`, `xlwt`, `python-pptx`, `reportlab`, `Pillow`, `pytesseract`.
 - External executables: `python3.12`, optional `soffice` (LibreOffice), optional `tesseract`.
+
+### Dependency Profiles
+The repository documents and verifies separate dependency profiles for the default workflow and the Docling-only path.
+
+<!-- BEGIN:DEPENDENCY_SCOPE_EXPLANATION -->
+- These libs are not required by Docling itself.
+- They are required by this repository's default implementation choices.
+- If you reduce the project to Docling-only conversion, most of them can be removed.
+<!-- END:DEPENDENCY_SCOPE_EXPLANATION -->
+
+Default workflow profile (`requirements.txt` and `code/scripts/requirements.txt`):
+
+<!-- BEGIN:DEFAULT_WORKFLOW_DEPENDENCIES -->
+| Library | Installed version | License | Used for |
+| --- | --- | --- | --- |
+| `docling` | `2.20.0` | MIT | Primary PDF-to-markdown extraction path. |
+| `reportlab` | `4.2.5` | BSD-style | Sample PDF generation. |
+| `python-docx` | `1.1.2` | MIT | DOCX generation and text extraction. |
+| `openpyxl` | `3.1.5` | MIT | XLSX generation and worksheet extraction. |
+| `xlwt` | `1.3.0` | BSD | Legacy XLS generation. |
+| `xlrd` | `2.0.1` | BSD | Legacy XLS reading. |
+| `python-pptx` | `1.0.2` | MIT | PPTX generation and slide extraction. |
+| `Pillow` | `10.4.0` | HPND | OCR sample image generation and image handling. |
+| `PyMuPDF` | `1.24.11` | AGPL-3.0 | PDF fallback text extraction and page rasterization for OCR. |
+| `pytesseract` | `0.3.13` | Apache-2.0 | Python wrapper for OCR execution. |
+<!-- END:DEFAULT_WORKFLOW_DEPENDENCIES -->
+
+Docling-only profile (`requirements-docling-only.txt`):
+
+<!-- BEGIN:DOCLING_ONLY_DEPENDENCIES -->
+| Library | Installed version | License | Used for |
+| --- | --- | --- | --- |
+| `docling` | `2.20.0` | MIT | Standalone Docling-only conversion modules. |
+<!-- END:DOCLING_ONLY_DEPENDENCIES -->
 
 ### Configuration and Environment Handling
 - Shell loads `${DOC_PREPROCESS_ENV_FILE}` (default `<project>/.env`) and exports runtime defaults.
@@ -94,12 +135,13 @@ docling_preprocessor_factory/
 1. `run_local.sh` loads `.env` and applies defaults.
 2. Validates required Python executable and exact version.
 3. Ensures expected files/directories exist.
-4. Writes pinned `requirements.txt`.
+4. Writes pinned `requirements.txt` from the canonical dependency profile.
 5. Creates/reuses virtual environment and installs dependencies.
 6. Invokes `preprocess_app.py` with resolved parameters.
 7. Checks output file existence and non-empty content.
 8. Invokes `verify_output.py`.
-9. Prints success message or exits non-zero on any failure.
+9. Invokes `verify_project_consistency.py`.
+10. Prints success message or exits non-zero on any failure.
 
 ### Key Workflow A: Preprocessing (Step-by-Step)
 1. `ApplicationEntryPoint` parses CLI args.
@@ -123,7 +165,11 @@ docling_preprocessor_factory/
    - JSON lines are valid,
    - required fields exist in each record,
    - every supported file in examples is represented in output via `source_file_path`.
-4. Raises runtime errors on first violation; shell exits non-zero.
+4. `ProjectConsistencyVerifier` validates:
+   - `requirements.txt`, `requirements-docling-only.txt`, and `code/scripts/requirements.txt` match the canonical dependency profiles,
+   - README, quickstart, and architecture documentation contain the synchronized dependency scope blocks,
+   - standalone Docling modules mention the trimmed `requirements-docling-only.txt` profile.
+5. Raises runtime errors on first violation; shell exits non-zero.
 
 ### Data Flow Between Components
 
@@ -136,6 +182,9 @@ docling_preprocessor_factory/
 | `DocumentPreprocessor` | `code/output/preprocessed.jsonl` | Unit-wise records: source path, input format, unit number/type, markdown text, OCR text, metadata. |
 | `run_local.sh` | `verify_output.py` | Validation command + config values. |
 | `verify_output.py` | Exit code to shell | Pass/fail result for pipeline execution. |
+| `dependency_profiles.py` | `requirements.txt` / docs | Canonical dependency versions, usage notes, and scope explanation blocks. |
+| `run_local.sh` | `verify_project_consistency.py` | Project consistency validation command. |
+| `verify_project_consistency.py` | Exit code to shell | Pass/fail result for dependency and documentation consistency. |
 
 ### Lifecycle Management
 - Process lifecycle is short-lived and batch-oriented.
@@ -147,6 +196,7 @@ docling_preprocessor_factory/
 - Shell: `set -euo pipefail` + `trap` for immediate failure visibility.
 - Preprocessor: collects per-file processing errors, logs all, then fails run.
 - Verifier: fails on first structural/semantic validation error.
+- Project consistency verifier: fails on first documentation or requirements drift.
 - Top-level Python entry points catch exceptions and return exit code `1`.
 
 ### Integration Points
@@ -177,6 +227,8 @@ docling_preprocessor_factory/
 | `DOC_PREPROCESS_REQUIREMENTS_FILE` | Requirements file path written by shell. |
 | `DOC_PREPROCESS_APP_FILE` | Preprocessing app entry script path. |
 | `DOC_PREPROCESS_VERIFY_FILE` | Verification script path. |
+| `DOC_PREPROCESS_VERIFY_PROJECT_FILE` | Project consistency verification script path. |
+| `DOC_PREPROCESS_DEPENDENCY_PROFILES_FILE` | Canonical dependency profile module path. |
 | `DOC_PREPROCESS_LIBREOFFICE_BIN` | Optional LibreOffice executable path. |
 | `DOC_PREPROCESS_TESSERACT_BIN` | OCR executable name/path. |
 | `DOC_PREPROCESS_SUPPORTED_EXTENSIONS` | Comma-separated extension allowlist. |

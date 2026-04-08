@@ -26,7 +26,11 @@ Design Principles
 
 Dependencies
 ------------
-pip install docling
+For this standalone module:
+    pip install -r requirements-docling-only.txt
+
+Additional libraries used by `preprocess_app.py` are not required for this
+standalone Docling-only path.
 
 Notes
 -----

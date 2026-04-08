@@ -29,6 +29,8 @@ export DOC_PREPROCESS_VENV_DIR="${DOC_PREPROCESS_VENV_DIR:-${DOC_PREPROCESS_CODE
 export DOC_PREPROCESS_REQUIREMENTS_FILE="${DOC_PREPROCESS_REQUIREMENTS_FILE:-${DOC_PREPROCESS_SCRIPT_DIR}/requirements.txt}"
 export DOC_PREPROCESS_APP_FILE="${DOC_PREPROCESS_APP_FILE:-${DOC_PREPROCESS_CODE_DIR}/preprocess_app.py}"
 export DOC_PREPROCESS_VERIFY_FILE="${DOC_PREPROCESS_VERIFY_FILE:-${DOC_PREPROCESS_CODE_DIR}/verify_output.py}"
+export DOC_PREPROCESS_VERIFY_PROJECT_FILE="${DOC_PREPROCESS_VERIFY_PROJECT_FILE:-${DOC_PREPROCESS_CODE_DIR}/verify_project_consistency.py}"
+export DOC_PREPROCESS_DEPENDENCY_PROFILES_FILE="${DOC_PREPROCESS_DEPENDENCY_PROFILES_FILE:-${DOC_PREPROCESS_CODE_DIR}/dependency_profiles.py}"
 export DOC_PREPROCESS_OUTPUT_JSONL="${DOC_PREPROCESS_OUTPUT_JSONL:-${DOC_PREPROCESS_OUTPUT_DIR}/preprocessed.jsonl}"
 
 export DOC_PREPROCESS_TESSERACT_BIN="${DOC_PREPROCESS_TESSERACT_BIN:-tesseract}"
@@ -89,20 +91,22 @@ if [[ ! -f "${DOC_PREPROCESS_VERIFY_FILE}" ]]; then
   exit 1
 fi
 
+if [[ ! -f "${DOC_PREPROCESS_VERIFY_PROJECT_FILE}" ]]; then
+  echo "ERROR: Project consistency verification script file not found: ${DOC_PREPROCESS_VERIFY_PROJECT_FILE}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${DOC_PREPROCESS_DEPENDENCY_PROFILES_FILE}" ]]; then
+  echo "ERROR: Dependency profiles file not found: ${DOC_PREPROCESS_DEPENDENCY_PROFILES_FILE}" >&2
+  exit 1
+fi
+
 mkdir -p "${DOC_PREPROCESS_EXAMPLES_DIR}" "${DOC_PREPROCESS_OUTPUT_DIR}"
 
-cat > "${DOC_PREPROCESS_REQUIREMENTS_FILE}" <<'REQ'
-docling==2.20.0
-reportlab==4.2.5
-python-docx==1.1.2
-openpyxl==3.1.5
-xlwt==1.3.0
-xlrd==2.0.1
-python-pptx==1.0.2
-Pillow==10.4.0
-PyMuPDF==1.24.11
-pytesseract==0.3.13
-REQ
+"${DOC_PREPROCESS_PYTHON_BIN}" "${DOC_PREPROCESS_DEPENDENCY_PROFILES_FILE}" \
+  write-requirements \
+  --profile default \
+  --output "${DOC_PREPROCESS_REQUIREMENTS_FILE}"
 
 if [[ ! -d "${DOC_PREPROCESS_VENV_DIR}" ]]; then
   "${DOC_PREPROCESS_PYTHON_BIN}" -m venv "${DOC_PREPROCESS_VENV_DIR}"
@@ -118,7 +122,7 @@ fi
 
 validate_python_version "${VENV_PY}" "${DOC_PREPROCESS_REQUIRED_PYTHON}"
 
-if ! "${VENV_PY}" -m pip install --upgrade pip setuptools wheel; then
+if ! "${VENV_PY}" -m pip install --upgrade pip "setuptools<82" wheel; then
   echo "WARNING: Could not upgrade pip/setuptools/wheel. Continuing with existing versions." >&2
 fi
 
@@ -171,5 +175,13 @@ VERIFY_CMD=(
 )
 
 "${VERIFY_CMD[@]}"
+
+VERIFY_PROJECT_CMD=(
+  "${VENV_PY}" "${DOC_PREPROCESS_VERIFY_PROJECT_FILE}"
+  "--project-dir" "${DOC_PREPROCESS_PROJECT_DIR}"
+  "--required-python" "${DOC_PREPROCESS_REQUIRED_PYTHON}"
+)
+
+"${VERIFY_PROJECT_CMD[@]}"
 
 echo "SUCCESS: End-to-end run completed and verification passed. Output file: ${DOC_PREPROCESS_OUTPUT_JSONL}"
