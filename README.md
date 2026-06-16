@@ -8,6 +8,45 @@ Related blog post [Building a Reproducible AI-Generated Project with ChatGPT, Co
 
 This repository provides a local-first preprocessing pipeline for multi-format business documents. It regenerates a representative sample corpus, extracts unit-wise content from each supported file, performs best-effort OCR where possible, and writes normalized JSONL output for downstream chunking and AI workflows.
 
+## Dependency Overview
+
+The diagram shows how the pipeline stages depend on the default-workflow Python libraries and the optional external tools. The chunk generator depends only on the Python standard library. Exact pinned versions and licenses are listed in [Open-Source Dependencies](#open-source-dependencies).
+
+```mermaid
+flowchart TB
+    IN["Input documents<br/>pdf · docx · pptx / ppt · xlsx / xls"]
+    PRE["preprocess_app.py<br/>unit-wise extraction + OCR"]
+    PJSON[("preprocessed.jsonl")]
+    MDEF["metadata_definition.json<br/>field allowlist + static fields"]
+    CHUNK["chunk_for_milvus.py<br/>Python standard library only"]
+    CJSON[("chunks.jsonl<br/>Milvus-ready")]
+
+    IN --> PRE --> PJSON --> CHUNK --> CJSON
+    MDEF -. configures .-> CHUNK
+
+    subgraph DEPS["Default workflow dependencies — used by preprocess_app.py"]
+        direction LR
+        L1["docling<br/>PDF to markdown"]
+        L2["PyMuPDF<br/>PDF fallback + raster"]
+        L3["python-docx<br/>DOCX"]
+        L4["python-pptx<br/>PPTX"]
+        L5["openpyxl<br/>XLSX"]
+        L6["xlrd / xlwt<br/>legacy XLS"]
+        L7["Pillow<br/>image handling"]
+        L8["pytesseract<br/>OCR wrapper"]
+        L9["reportlab<br/>sample PDFs"]
+    end
+    DEPS -. imported by .-> PRE
+
+    subgraph EXT["Optional external tools"]
+        direction LR
+        TES["tesseract<br/>OCR engine"]
+        SOF["soffice / LibreOffice<br/>.ppt conversion"]
+    end
+    TES -. via pytesseract .-> PRE
+    SOF -. converts .ppt .-> PRE
+```
+
 ## What The Code Does
 
 - `code/scripts/run_local.sh` loads `.env` if present, validates Python `3.12`, creates or reuses `code/.venv`, installs pinned dependencies, runs the preprocessor, and then runs both verification steps.
