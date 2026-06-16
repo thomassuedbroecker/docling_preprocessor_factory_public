@@ -51,11 +51,13 @@ What the helper script does:
 - regenerates sample input files in `code/examples/`
 - writes `code/output/preprocessed.jsonl`
 - runs `code/verify_output.py` to validate structure and source coverage
+- runs `code/chunk_for_milvus.py` to write Milvus-ready chunks to `code/output/chunks.jsonl` using `code/metadata_definition.json`
 - runs `code/verify_project_consistency.py` to validate that dependency documentation and requirements stay in sync
 
 ## Input, Output, and Verification
 - The application loads input documents from `code/examples/`.
 - The automation writes output artifacts to `code/output/preprocessed.jsonl`.
+- The chunk generator writes Milvus-ready chunks to `code/output/chunks.jsonl`, shaped by the metadata definition in `code/metadata_definition.json`.
 - `run_local.sh` verifies that:
   - the JSONL file exists and is not empty,
   - each JSONL record contains required fields,

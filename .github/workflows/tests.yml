@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  end-to-end:
+    name: End-to-end run and verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Tesseract OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr
+
+      - name: Run end-to-end pipeline and verification
+        env:
+          DOC_PREPROCESS_PYTHON_BIN: python
+          DOC_PREPROCESS_REQUIRED_PYTHON: "3.12"
+          DOC_PREPROCESS_TESSERACT_BIN: tesseract
+        run: bash code/scripts/run_local.sh
+
+      - name: Upload output artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-output
+          path: |
+            code/output/preprocessed.jsonl
+            code/output/chunks.jsonl
+          if-no-files-found: ignore

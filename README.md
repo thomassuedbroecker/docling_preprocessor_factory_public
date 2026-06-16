@@ -1,5 +1,7 @@
 # Docling Preprocessor Factory
 
+[![Tests](https://github.com/thomassuedbroecker/docling_preprocessor_factory_public/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/thomassuedbroecker/docling_preprocessor_factory_public/actions/workflows/tests.yml)
+
 _Note: This README was developed with the help of AI._
 
 Related blog post [Building a Reproducible AI-Generated Project with ChatGPT, Codex, and Docling in VS Code](https://suedbroecker.net/2026/02/22/building-a-reproducible-ai-generated-project-with-chatgpt-codex-and-docling-in-vs-code/) on [suedbroecker.net](https://www.suedbroecker.com).
@@ -12,6 +14,7 @@ This repository provides a local-first preprocessing pipeline for multi-format b
 - `code/preprocess_app.py` regenerates sample files in `code/examples/` on every run and processes all supported files recursively.
 - `code/verify_output.py` fails the run if `code/output/preprocessed.jsonl` is missing, empty, structurally invalid, or missing coverage for any supported example file.
 - `code/verify_project_consistency.py` fails the run if the dependency documentation, requirements files, and standalone Docling notes drift out of sync.
+- `code/chunk_for_milvus.py` reads the preprocessed JSONL and writes `code/output/chunks.jsonl`, a Milvus-ready file of size-bounded text chunks whose `metadata` object is shaped by a configurable metadata definition.
 - `code/Docling_multi_format_preprocessing_pipeline.py` is an alternate standalone Docling-centric module and is not invoked by the default shell workflow.
 
 ## Supported Formats
@@ -33,10 +36,13 @@ This repository provides a local-first preprocessing pipeline for multi-format b
 | `code/preprocess_app.py` | Sample generation plus multi-format preprocessing logic. |
 | `code/verify_output.py` | JSONL structure and source-coverage validation. |
 | `code/verify_project_consistency.py` | Verifies that dependency docs, requirements files, and Docling-only notes stay in sync. |
+| `code/chunk_for_milvus.py` | Reads the preprocessed JSONL and writes Milvus-ready chunk records using the configurable metadata definition. |
+| `code/metadata_definition.json` | Metadata definition file controlling the chunk `metadata` field allowlist and injected static fields. |
 | `code/dependency_profiles.py` | Canonical dependency profiles used by the bootstrap script and project consistency verifier. |
 | `code/docling_config_examples.py` | Extracted Docling-only converter configurations for the example pipeline, including OCR variants that need extra runtime support. |
 | `code/examples/` | Generated sample documents processed by the application. |
 | `code/output/preprocessed.jsonl` | Normalized output written by the preprocessor. |
+| `code/output/chunks.jsonl` | Milvus-ready chunk records written by the chunk generator. |
 | `requirements.txt` | Pinned top-level Python dependency set. |
 | `requirements-docling-only.txt` | Trimmed Python dependency set for the standalone Docling-only modules. |
 | `code/scripts/requirements.txt` | Runtime requirements file rewritten by `run_local.sh` from the same pinned versions. |
@@ -76,6 +82,49 @@ Each JSONL record written to `code/output/preprocessed.jsonl` contains these req
 
 The verifier also checks that every supported file under `code/examples/` is represented in the JSONL output.
 
+## Chunk Generation For Milvus
+
+After preprocessing and verification, `code/scripts/run_local.sh` runs `code/chunk_for_milvus.py`. It reads `code/output/preprocessed.jsonl` and writes `code/output/chunks.jsonl`, where each line is one size-bounded text chunk ready to embed and insert into a Milvus collection. No live database connection is made; the output is a portable JSONL.
+
+### Metadata Definition
+
+The chunk `metadata` object is shaped by `code/metadata_definition.json`, referenced through `DOC_PREPROCESS_METADATA_DEFINITION_FILE`. The file controls two things:
+
+| Key | Meaning |
+| --- | --- |
+| `field_allowlist` | List of keys to keep from each source record's `metadata`. Keys not present in a given record are skipped. An empty or missing list keeps every key. |
+| `static_fields` | Fixed key/value pairs injected into every chunk's `metadata` (for example a Milvus collection name or a source-system tag). Static fields win on key collisions with allowlisted keys. |
+
+Example:
+
+```json
+{
+  "field_allowlist": ["page_number", "total_pages", "sheet_name"],
+  "static_fields": {
+    "milvus_collection": "documents",
+    "source_system": "docling_preprocessor_factory"
+  }
+}
+```
+
+### Chunk Output Schema
+
+Each JSONL record written to `code/output/chunks.jsonl` contains these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `chunk_id` | Stable identifier `<hash>-u<unit>-c<index>` suitable as a Milvus primary key. |
+| `text` | The chunk text to embed. Includes appended OCR text when `DOC_PREPROCESS_CHUNK_INCLUDE_OCR` is true. |
+| `source_file_path` | Absolute path to the source document. |
+| `input_format` | File format such as `pdf`, `docx`, `pptx`, `xlsx`, or `xls`. |
+| `unit_number` | One-based page, slide, sheet, or document index the chunk came from. |
+| `unit_type` | Logical unit type: `page`, `slide`, `sheet`, or `document`. |
+| `chunk_index` | Zero-based index of this chunk within its source unit. |
+| `chunk_count` | Total number of chunks produced from the source unit. |
+| `metadata` | Metadata object shaped by the metadata definition described above. |
+
+The chunk generator self-verifies its output: it fails the run if no chunks are produced, if any required field is missing, if `text` is empty, or if `chunk_index` is not less than `chunk_count`.
+
 ## Configuration
 
 Important environment variables loaded by the default workflow:
@@ -93,6 +142,11 @@ Important environment variables loaded by the default workflow:
 | `DOC_PREPROCESS_SUPPORTED_EXTENSIONS` | `.pdf,.docx,.xlsx,.xls,.pptx,.ppt` | Recursive file extension allowlist. |
 | `DOC_PREPROCESS_REQUIRED_FIELDS` | `source_file_path,input_format,unit_number,unit_type,text_markdown,ocr_image_text,metadata` | Required JSONL keys enforced by the verifier. |
 | `DOC_PREPROCESS_VERIFY_PROJECT_FILE` | `code/verify_project_consistency.py` | Consistency verifier that checks dependency docs and requirements files. |
+| `DOC_PREPROCESS_CHUNK_OUTPUT_JSONL` | `code/output/chunks.jsonl` | Milvus-ready chunk file written by `code/chunk_for_milvus.py`. |
+| `DOC_PREPROCESS_METADATA_DEFINITION_FILE` | `code/metadata_definition.json` | Metadata definition file (field allowlist plus static fields) applied to each chunk. |
+| `DOC_PREPROCESS_CHUNK_SIZE` | `1000` | Maximum chunk size in characters. |
+| `DOC_PREPROCESS_CHUNK_OVERLAP` | `150` | Character overlap carried between adjacent chunks. Must be smaller than the chunk size. |
+| `DOC_PREPROCESS_CHUNK_INCLUDE_OCR` | `true` | When true, appends each unit's OCR text to the chunked content. |
 
 ## Docling Configuration For The Example
 
@@ -146,6 +200,8 @@ Additional OCR runtime requirements for these variants:
 
 This repository currently uses executable end-to-end checks instead of a separate `pytest` or `unittest` suite.
 
+The same end-to-end command runs in continuous integration on every push and pull request to `main` via the [Tests workflow](.github/workflows/tests.yml); the status badge at the top of this README reflects the latest run.
+
 Default end-to-end command:
 
 ```bash
@@ -175,6 +231,15 @@ code/.venv/bin/python code/verify_output.py \
   --output-jsonl code/output/preprocessed.jsonl \
   --supported-extensions .pdf,.docx,.xlsx,.xls,.pptx,.ppt \
   --required-fields source_file_path,input_format,unit_number,unit_type,text_markdown,ocr_image_text,metadata \
+  --required-python 3.12
+
+code/.venv/bin/python code/chunk_for_milvus.py \
+  --input-jsonl code/output/preprocessed.jsonl \
+  --chunk-output-jsonl code/output/chunks.jsonl \
+  --metadata-definition-file code/metadata_definition.json \
+  --chunk-size 1000 \
+  --chunk-overlap 150 \
+  --include-ocr true \
   --required-python 3.12
 
 code/.venv/bin/python code/verify_project_consistency.py \
@@ -272,6 +337,11 @@ Optional runtime notes for Docling-only variants:
 <!-- END:OPTIONAL_RUNTIME_NOTES -->
 
 `PyMuPDF` is open source, but it is licensed under AGPL-3.0. Review that license carefully if you plan to redistribute or network-expose a derived application.
+
+### Chunk Generation And CI Licensing Notes
+
+- `code/chunk_for_milvus.py` and `code/metadata_definition.json` use only the Python standard library. They add no new third-party runtime dependencies and therefore introduce no new license obligations; the dependency tables above remain the complete runtime set.
+- The `.github/workflows/tests.yml` continuous integration workflow uses GitHub-maintained actions (`actions/checkout`, `actions/setup-python`, `actions/upload-artifact`), which are MIT-licensed and used only in CI, not shipped or imported at runtime.
 
 ## More Detail
 

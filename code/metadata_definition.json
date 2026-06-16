@@ -1,0 +1,20 @@
+{
+  "field_allowlist": [
+    "page_number",
+    "total_pages",
+    "slide_number",
+    "total_slides",
+    "sheet_name",
+    "sheet_number",
+    "total_sheets",
+    "paragraph_count",
+    "image_count",
+    "docling_used",
+    "tesseract_available"
+  ],
+  "static_fields": {
+    "milvus_collection": "documents",
+    "source_system": "docling_preprocessor_factory",
+    "ingestion_pipeline_version": "1.0.0"
+  }
+}

@@ -9,6 +9,7 @@ The system provides a local document preprocessing pipeline that:
 - Generates representative example files (PDF, DOCX, XLS/XLSX, PPTX, optional PPT).
 - Extracts content unit-wise for chunking workflows.
 - Produces normalized JSONL output with metadata and OCR text (when available).
+- Generates Milvus-ready chunk records with a configurable metadata definition.
 - Verifies output integrity and source coverage.
 
 ### Core Responsibilities
@@ -22,6 +23,7 @@ The system provides a local document preprocessing pipeline that:
 Modular batch-processing pipeline with script orchestration:
 - **Orchestrator layer**: `code/scripts/run_local.sh`
 - **Application layer**: `code/preprocess_app.py`
+- **Chunk-generation layer**: `code/chunk_for_milvus.py` (driven by `code/metadata_definition.json`)
 - **Verification layers**: `code/verify_output.py`, `code/verify_project_consistency.py`
 - **Optional alternate pipeline module**: `code/Docling_multi_format_preprocessing_pipeline.py` (not invoked by default orchestration)
 
@@ -43,6 +45,8 @@ docling_preprocessor_factory/
     preprocess_app.py
     verify_output.py
     verify_project_consistency.py
+    chunk_for_milvus.py
+    metadata_definition.json
     Docling_multi_format_preprocessing_pipeline.py
     docling_config_examples.py
     examples/
@@ -69,6 +73,10 @@ docling_preprocessor_factory/
 | `code/verify_output.py` | `VerificationApplication`, `ApplicationEntryPoint` | Verifier lifecycle and exit behavior. |
 | `code/dependency_profiles.py` | `DependencySpec` and render helpers | Canonical dependency profile definitions shared by bootstrap and consistency verification. |
 | `code/verify_project_consistency.py` | `ProjectConsistencyVerifier` | Validates dependency profile files and documentation blocks remain synchronized. |
+| `code/chunk_for_milvus.py` | `ChunkConfig`, `ChunkConfigLoader` | Resolves chunk-generation config from CLI/environment. |
+| `code/chunk_for_milvus.py` | `MetadataDefinition`, `MetadataDefinitionLoader` | Loads the metadata definition file and shapes each chunk's metadata via field allowlist plus static fields. |
+| `code/chunk_for_milvus.py` | `TextChunker`, `ChunkRecordFactory` | Splits unit text into size-bounded overlapping chunks and builds Milvus-ready chunk records. |
+| `code/chunk_for_milvus.py` | `ChunkEmitter`, `ChunkApplication`, `ApplicationEntryPoint` | Reads preprocessed JSONL, writes chunk JSONL, and self-verifies the chunk output. |
 | `code/Docling_multi_format_preprocessing_pipeline.py` | `PreprocessingPipeline` and related classes | Standalone Docling-centric extraction pipeline with environment-driven CLI wrapper. |
 | `code/docling_config_examples.py` | Converter builder helpers | Isolates the Docling-only converter configuration variants used in the documentation. |
 
@@ -140,8 +148,9 @@ Docling-only profile (`requirements-docling-only.txt`):
 6. Invokes `preprocess_app.py` with resolved parameters.
 7. Checks output file existence and non-empty content.
 8. Invokes `verify_output.py`.
-9. Invokes `verify_project_consistency.py`.
-10. Prints success message or exits non-zero on any failure.
+9. Invokes `chunk_for_milvus.py` to write Milvus-ready chunks and checks the chunk file is non-empty.
+10. Invokes `verify_project_consistency.py`.
+11. Prints success message or exits non-zero on any failure.
 
 ### Key Workflow A: Preprocessing (Step-by-Step)
 1. `ApplicationEntryPoint` parses CLI args.
@@ -156,7 +165,16 @@ Docling-only profile (`requirements-docling-only.txt`):
    - XLSX/XLS: sheet-level markdown table extraction + best-effort OCR for XLSX images.
 7. Writes one JSON object per unit to configured JSONL output.
 
-### Key Workflow B: Verification (Step-by-Step)
+### Key Workflow B: Chunk Generation (Step-by-Step)
+1. `ChunkConfigLoader` resolves chunk-generation config (input/output paths, metadata definition file, chunk size/overlap, OCR flag).
+2. `MetadataDefinitionLoader` loads and validates the metadata definition file.
+3. `ChunkEmitter` reads each preprocessed record and builds the unit text (markdown plus optional OCR text).
+4. `TextChunker` splits the unit text into size-bounded overlapping chunks on word/line boundaries.
+5. `MetadataDefinition` applies the field allowlist and injects static fields for each chunk.
+6. `ChunkRecordFactory` builds one Milvus-ready record per chunk and writes it to the chunk JSONL.
+7. The emitter self-verifies the chunk output (required fields, non-empty text, valid chunk indexing).
+
+### Key Workflow C: Verification (Step-by-Step)
 1. `VerificationConfigLoader` resolves verifier config.
 2. Version check via `PythonVersionEnforcer`.
 3. `OutputVerifier` validates:
@@ -182,6 +200,8 @@ Docling-only profile (`requirements-docling-only.txt`):
 | `DocumentPreprocessor` | `code/output/preprocessed.jsonl` | Unit-wise records: source path, input format, unit number/type, markdown text, OCR text, metadata. |
 | `run_local.sh` | `verify_output.py` | Validation command + config values. |
 | `verify_output.py` | Exit code to shell | Pass/fail result for pipeline execution. |
+| `code/output/preprocessed.jsonl` + `metadata_definition.json` | `chunk_for_milvus.py` | Preprocessed records and the metadata definition (field allowlist plus static fields). |
+| `chunk_for_milvus.py` | `code/output/chunks.jsonl` | Milvus-ready chunk records: chunk id, text, source identity fields, chunk index/count, shaped metadata. |
 | `dependency_profiles.py` | `requirements.txt` / docs | Canonical dependency versions, usage notes, and scope explanation blocks. |
 | `run_local.sh` | `verify_project_consistency.py` | Project consistency validation command. |
 | `verify_project_consistency.py` | Exit code to shell | Pass/fail result for dependency and documentation consistency. |
@@ -229,6 +249,12 @@ Docling-only profile (`requirements-docling-only.txt`):
 | `DOC_PREPROCESS_VERIFY_FILE` | Verification script path. |
 | `DOC_PREPROCESS_VERIFY_PROJECT_FILE` | Project consistency verification script path. |
 | `DOC_PREPROCESS_DEPENDENCY_PROFILES_FILE` | Canonical dependency profile module path. |
+| `DOC_PREPROCESS_CHUNK_FILE` | Chunk-generation script path. |
+| `DOC_PREPROCESS_CHUNK_OUTPUT_JSONL` | Milvus-ready chunk JSONL output path. |
+| `DOC_PREPROCESS_METADATA_DEFINITION_FILE` | Metadata definition file path (field allowlist plus static fields). |
+| `DOC_PREPROCESS_CHUNK_SIZE` | Maximum chunk size in characters (default `1000`). |
+| `DOC_PREPROCESS_CHUNK_OVERLAP` | Character overlap between adjacent chunks (default `150`). |
+| `DOC_PREPROCESS_CHUNK_INCLUDE_OCR` | Whether to append OCR text to chunk content (default `true`). |
 | `DOC_PREPROCESS_LIBREOFFICE_BIN` | Optional LibreOffice executable path. |
 | `DOC_PREPROCESS_TESSERACT_BIN` | OCR executable name/path. |
 | `DOC_PREPROCESS_SUPPORTED_EXTENSIONS` | Comma-separated extension allowlist. |
@@ -271,6 +297,8 @@ Docling-only profile (`requirements-docling-only.txt`):
 | Validation rules | `OutputVerifier` | Add semantic validations (e.g., unit ordering, format-specific constraints). |
 | Input generation policy | `SampleFileGenerator` | Add/remove sample artifacts while preserving app flow. |
 | Config model | `AppConfigLoader` / `VerificationConfigLoader` | Introduce new env vars/CLI flags with explicit validation. |
+| Chunk metadata shape | `code/metadata_definition.json` + `MetadataDefinition` | Adjust the field allowlist or static fields, or extend the loader to support typed schemas. |
+| Chunking strategy | `TextChunker` | Replace the splitting algorithm (for example token-based or semantic splitting) behind the same interface. |
 
 ---
 
