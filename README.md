@@ -44,7 +44,7 @@ flowchart TB
         SOF["soffice / LibreOffice<br/>.ppt conversion"]
     end
     TES -. via pytesseract .-> PRE
-    SOF -. converts .ppt .-> PRE
+    SOF -. converts ppt .-> PRE
 ```
 
 ## What The Code Does
