@@ -249,9 +249,9 @@ code/.venv/bin/python code/verify_project_consistency.py \
 
 ## Tested
 
-Current verified state as of `2026-04-08`:
+Current verified state as of `2026-06-16`:
 
-The commands below were rerun after aligning dependency profiles, bootstrap behavior, and the documentation consistency checks.
+The commands below were rerun after adding the Milvus-ready chunk generation step, the configurable metadata definition, and the GitHub Actions workflow, and after re-aligning the dependency profiles and documentation consistency checks.
 
 | State | Meaning |
 | --- | --- |
@@ -261,20 +261,22 @@ The commands below were rerun after aligning dependency profiles, bootstrap beha
 
 | State | Check | Result | Details |
 | --- | --- | --- | --- |
-| 🟢 | `bash code/scripts/run_local.sh` | Passed on `2026-04-08` | Reran after the dependency/doc sync changes, created or reused `code/.venv`, regenerated the sample corpus, wrote `code/output/preprocessed.jsonl`, and finished with both verification steps succeeding. |
-| 🟢 | `code/.venv/bin/python code/preprocess_app.py ...` | Passed on `2026-04-08` | Rewrote `code/output/preprocessed.jsonl` and generated `9` JSONL records from `5` supported example documents in the current environment. |
-| 🟢 | `code/.venv/bin/python code/verify_output.py ...` | Passed on `2026-04-08` | Validated JSONL parseability, required fields, and source coverage for the generated sample set. |
-| 🟢 | `code/.venv/bin/python code/verify_project_consistency.py ...` | Passed on `2026-04-08` | Reran after the sync changes and validated dependency profiles against `requirements.txt`, `requirements-docling-only.txt`, `code/scripts/requirements.txt`, and the documentation blocks in the repository. |
-| 🟢 | Runtime toolchain versions | Verified on `2026-04-08` | `Python 3.12.12` in `code/.venv` and `tesseract 5.5.1` at `/opt/homebrew/bin/tesseract`. |
-| 🟡 | LibreOffice availability | Checked on `2026-04-08` | `soffice` was not installed, so legacy `.ppt` sample generation and `.ppt` processing were skipped by design. |
-| 🟡 | Known runtime warning | Present on `2026-04-08` | `torch.utils.data.dataloader` emitted a non-blocking `pin_memory` warning during preprocessing; the run still passed. |
-| 🟢 | Current failing checks | None on `2026-04-08` | No blocking failures remained after the successful end-to-end run. |
+| 🟢 | `bash code/scripts/run_local.sh` | Passed on `2026-06-16` | Created a fresh `code/.venv`, installed pinned dependencies, regenerated the sample corpus, wrote `code/output/preprocessed.jsonl`, generated `code/output/chunks.jsonl`, and finished with output verification, chunk generation, and project consistency all succeeding. |
+| 🟢 | `code/.venv/bin/python code/preprocess_app.py ...` | Passed on `2026-06-16` | Rewrote `code/output/preprocessed.jsonl` and generated `9` JSONL records from `5` supported example documents in the current environment. |
+| 🟢 | `code/.venv/bin/python code/verify_output.py ...` | Passed on `2026-06-16` | Validated JSONL parseability, required fields, and source coverage for the generated sample set. |
+| 🟢 | `code/.venv/bin/python code/chunk_for_milvus.py ...` | Passed on `2026-06-16` | Wrote `9` Milvus-ready chunk records to `code/output/chunks.jsonl` from `9` source units, applied the metadata definition (field allowlist plus static fields), and self-verified the chunk output. |
+| 🟢 | `code/.venv/bin/python code/verify_project_consistency.py ...` | Passed on `2026-06-16` | Validated dependency profiles against `requirements.txt`, `requirements-docling-only.txt`, `code/scripts/requirements.txt`, and the documentation blocks in the repository. |
+| 🟢 | Runtime toolchain versions | Verified on `2026-06-16` | `Python 3.12.12` in `code/.venv` and `tesseract 5.5.1` at `/opt/homebrew/bin/tesseract`. |
+| 🟡 | LibreOffice availability | Checked on `2026-06-16` | `soffice` was not installed, so legacy `.ppt` sample generation and `.ppt` processing were skipped by design. |
+| 🟡 | Known runtime warning | Present on `2026-06-16` | `torch.utils.data.dataloader` emitted a non-blocking `pin_memory` warning during preprocessing; the run still passed. |
+| 🟢 | Current failing checks | None on `2026-06-16` | No blocking failures remained after the successful end-to-end run. |
 
 What is covered by the available checks:
 
 - creation and reuse of `code/.venv` plus dependency installation through the default bootstrap script
 - sample document generation under `code/examples/` for PDF, DOCX, PPTX, XLSX, and XLS
 - preprocessing and JSONL write paths for page-wise, slide-wise, sheet-wise, and document-level extraction
+- Milvus-ready chunk generation with the configurable metadata definition (field allowlist plus static fields) and self-verified chunk output
 - verifier checks for JSONL existence, non-empty output, required fields, and source-file coverage
 - dependency profile consistency across code, requirements files, and documentation
 - OCR execution in the current environment with local `tesseract 5.5.1`
@@ -297,7 +299,7 @@ Why additional libraries are present in the default workflow:
 - If you reduce the project to Docling-only conversion, most of them can be removed.
 <!-- END:DEPENDENCY_SCOPE_EXPLANATION -->
 
-The default shell workflow still writes the canonical default profile into `code/scripts/requirements.txt` before installation. The tables below reflect the locally verified versions on `2026-04-08`.
+The default shell workflow still writes the canonical default profile into `code/scripts/requirements.txt` before installation. The tables below reflect the locally verified versions on `2026-06-16`.
 
 Current verified Python version:
 
